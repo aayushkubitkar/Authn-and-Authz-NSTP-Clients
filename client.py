@@ -21,7 +21,7 @@ HOST = 'localhost'
 PORT = 22300
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, PORT))
-sk_client, pk_client= crypto_kx.crypto_kx_keypair()
+pk_client, sk_client= crypto_kx.crypto_kx_keypair()
 
 #Clienthello
 nstp_msg=nstp_v3_pb2.NSTPMessage()
@@ -67,3 +67,5 @@ full_msg = recv_full_msg(len_msg[0], s)
 res_msg = nstp_v3_pb2.NSTPMessage()
 res_msg.ParseFromString(full_msg)
 print(res_msg)
+
+#10.110.39.71
