@@ -1,6 +1,7 @@
 import socket
 import select
 import struct
+import sys
 import nstp_v3_pb2
 from nacl.bindings import crypto_kx, crypto_secretbox, crypto_secretbox_open
 from nacl import utils, secret, hash
@@ -28,10 +29,10 @@ def handleClientHello(s, nstp_msg):
             serverHello(s, c_hello.user_agent)
         else:
             print ("out of spec")
-            errorRes(s, "out of spec")
+            plaintextErrorRes(s, "out of spec")
     else:
         print ("out of spec")
-        errorRes(s, "out of spec")
+        plaintextErrorRes(s, "out of spec")
 
 def serverHello(s, user_agent):
     print ("inside server hello")
@@ -84,7 +85,7 @@ def handleAuthReq(s, decr_msg):
                 print ("Authentication success")
                 list_ip_authenticated[s]=1 #Connections with value 1 are authenticated
                 conn_user_map[s]=auth_req.username #Used for private value store
-                list_ip_failed_logins[clientsocket.getpeername()[0]]=0 #resetting the failed login attempts
+                # list_ip_failed_logins[clientsocket.getpeername()[0]]=0 #resetting the failed login attempts
                 authRes(s, True)
             else:
                 print ("Authentication failed")
@@ -149,7 +150,7 @@ def handleStoreReq(s, decr_msg):
                 print (store_req.key)
                 print (priv_value_store)
             else:
-                print("++", store_req.key)
+                print(store_req.key)
                 priv_value_store[username].update({store_req.key:store_req.value})
         storeRes(s, store_req.key, store_req.value)
     else:
@@ -182,6 +183,7 @@ def handleLoadReq(s, decr_msg):
             print ("access private key")
             username = conn_user_map[s]
             print ("{}-->{}".format(load_req.key, username))
+            print ("private key/value store-->",priv_value_store)
             if username in priv_value_store.keys() and load_req.key in priv_value_store[username].keys():
                 loadRes(s, priv_value_store[username][load_req.key])
             else:
@@ -209,11 +211,11 @@ def EncryptAndSend(s,res):
     response_message[s]= append_len(nstp_res.SerializeToString())
 
 def unblockIP(s):
-    list_ip_ban[s.getpeername()[0]]=0 #IPs with value 0 are allowed to authenticate
+    list_ip_ban[s.getpeername()[0]]=0 #lifting the ban from an IP
 
 def handleRateLimit(s):
     list_ip_ban[s.getpeername()[0]]=1 #IPs with value 1 are banned
-    t = threading.Timer(25, unblockIP, [s])
+    t = threading.Timer(10, unblockIP, [s])
     t.start()
 
 def clientInitialized(conn):
@@ -239,7 +241,7 @@ def recv_full_msg(n, s):
     return msg
 
 def getHashFromFile(username):
-    filepath='pass.txt'
+    filepath=sys.argv[1]
     with open(filepath) as fp:
         for cnt, line in enumerate(fp):
             entry = line.split(':')
@@ -252,10 +254,14 @@ def errorRes(s, msg):
     err.error_message=msg
     decr_res = nstp_v3_pb2.DecryptedMessage()
     decr_res.error_message.CopyFrom(err)
-    # nstp_res= nstp_v3_pb2.NSTPMessage()
-    # nstp_res.error_message.CopyFrom(err)
-    # response_message[s]= append_len(nstp_res.SerializeToString())
-    EncryptAndSend(s,err)
+    EncryptAndSend(s,decr_res)
+
+def plaintextErrorRes(s,msg):
+    err = nstp_v3_pb2.ErrorMessage()
+    err.error_message=msg
+    nstp_res= nstp_v3_pb2.NSTPMessage()
+    nstp_res.error_message.CopyFrom(err)
+    response_message[s]= append_len(nstp_res.SerializeToString())
 
 HOST = '0.0.0.0'
 PORT = 22300
@@ -326,4 +332,3 @@ while incoming:
         except Exception as e:
             print ("exception raised--->", e)
             outgoing.remove(s)
-    # for s in exceptions:
